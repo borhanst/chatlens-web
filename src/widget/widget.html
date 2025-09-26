@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatLens Widget</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Inter, system-ui, -apple-system, sans-serif;
+        }
+
+        .widget-collapsed {
+            width: 60px;
+            height: 60px;
+            cursor: pointer;
+            background-color: #2563eb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease-in-out;
+        }
+
+        .widget-collapsed:hover {
+            background-color: #1d4ed8;
+        }
+
+        .widget-expanded {
+            display: none;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            padding: 16px;
+            background-color: #2563eb;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header h1 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .close-button {
+            background: none;
+            border: none;
+            color: #ffffff;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .chat-input {
+            padding: 16px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .chat-input form {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .chat-input button {
+            padding: 8px 16px;
+            background-color: #2563eb;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .chat-input button:hover {
+            background-color: #1d4ed8;
+        }
+
+        body.expanded .widget-collapsed {
+            display: none;
+        }
+
+        body.expanded .widget-expanded {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <div class="widget-collapsed" id="launch-button">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </div>
+
+    <div class="widget-expanded">
+        <div class="chat-header">
+            <h1>Chat with us</h1>
+            <button class="close-button" id="close-button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+            <!-- Messages will be inserted here -->
+        </div>
+        <div class="chat-input">
+            <form id="chat-form">
+                <input type="text" placeholder="Type your message..." id="message-input">
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const agentId = urlParams.get('agentId');
+        const domain = urlParams.get('domain');
+
+        // Elements
+        const launchButton = document.getElementById('launch-button');
+        const closeButton = document.getElementById('close-button');
+        const chatForm = document.getElementById('chat-form');
+        const messageInput = document.getElementById('message-input');
+        const messagesContainer = document.getElementById('chat-messages');
+
+        // Event handlers
+        launchButton.addEventListener('click', () => {
+            document.body.classList.add('expanded');
+            window.parent.postMessage({ type: 'OPEN_CHAT' }, domain);
+        });
+
+        closeButton.addEventListener('click', () => {
+            document.body.classList.remove('expanded');
+            window.parent.postMessage({ type: 'CLOSE_CHAT' }, domain);
+        });
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = messageInput.value.trim();
+            if (message) {
+                // Add message to UI
+                addMessage('user', message);
+                // Clear input
+                messageInput.value = '';
+                // Send message to backend
+                sendMessage(message);
+            }
+        });
+
+        function addMessage(sender, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.style.cssText = `
+                margin-bottom: 12px;
+                padding: 8px 12px;
+                border-radius: 8px;
+                max-width: 80%;
+                ${sender === 'user' ? 'margin-left: auto; background-color: #2563eb; color: #ffffff;' : 'background-color: #f3f4f6;'}
+            `;
+            messageDiv.textContent = text;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        async function sendMessage(message) {
+            try {
+                const response = await fetch('https://api.chatlens.com/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        agentId,
+                        message,
+                    }),
+                });
+
+                const data = await response.json();
+                addMessage('bot', data.response);
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addMessage('bot', 'Sorry, there was an error processing your message.');
+            }
+        }
+    </script>
+</body>
+</html>
