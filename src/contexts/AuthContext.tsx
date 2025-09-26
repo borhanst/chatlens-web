@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, AuthResponse, LoginData, RegisterData, loginUser, registerUser, validateAuthToken, logoutUser } from '../utils/auth';
+import { User, AuthResponse, LoginData, RegisterData, loginUser, registerUser, logoutUser } from '../utils/auth';
+import { getValidToken } from '../services/tokenService';
 
 // Auth context interface
 interface AuthContextType {
@@ -22,7 +23,7 @@ interface AuthProviderProps {
 }
 
 // Local storage keys
-const TOKEN_KEY = 'chatlens_auth_token';
+const TOKEN_KEY = 'authToken';
 const USER_KEY = 'chatlens_user_data';
 
 /**
@@ -37,15 +38,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Computed property for authentication status
   const isAuthenticated = !!user && !!token;
 
-  /**
-   * Gets client IP address (mock implementation)
-   * In production, this would be handled server-side
-   */
-  const getClientIp = (): string => {
-    // Mock IP for demo purposes
-    // In production, this would be determined server-side
-    return '192.168.1.1';
-  };
+
 
   /**
    * Saves authentication data to localStorage
@@ -82,22 +75,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     
     try {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
-
-      if (!storedToken || !storedUser) {
+      const validToken = await getValidToken();
+      
+      if (!validToken) {
         clearAuthData();
         return;
       }
 
-      // Validate token
-      const validation = validateAuthToken(storedToken);
-      
-      if (validation.isValid && validation.user) {
-        setUser(validation.user);
-        setToken(storedToken);
+      // Get user data with valid token
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/users/me/`, {
+        headers: {
+          'Authorization': `${import.meta.env.VITE_AUTHORIZATION_TOKEN_TYPE} ${validToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+        setToken(validToken);
       } else {
-        // Token is invalid, clear stored data
         clearAuthData();
       }
     } catch (error) {
@@ -113,11 +110,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const login = async (loginData: LoginData): Promise<AuthResponse> => {
     try {
-      const clientIp = getClientIp();
-      const response = await loginUser(loginData, clientIp);
+      const response = await loginUser(loginData);
 
-      if (response.success && response.user && response.token) {
-        saveAuthData(response.user, response.token);
+      if (response.success && response.user) {
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          saveAuthData(response.user, token);
+        }
       }
 
       return response;
@@ -135,11 +134,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const register = async (registerData: RegisterData): Promise<AuthResponse> => {
     try {
-      const clientIp = getClientIp();
-      const response = await registerUser(registerData, clientIp);
+      const response = await registerUser(registerData);
 
-      if (response.success && response.user && response.token) {
-        saveAuthData(response.user, response.token);
+      if (response.success && response.user) {
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          saveAuthData(response.user, token);
+        }
       }
 
       return response;
@@ -157,11 +158,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const logout = () => {
     try {
-      logoutUser();
+      // Clear refresh token on server if needed
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        fetch(`${import.meta.env.VITE_API_URL}/api/auth/jwt/refresh/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh: refreshToken })
+        }).catch(() => {}); // Ignore errors
+      }
+      
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('refreshToken');
       clearAuthData();
     } catch (error) {
       console.error('Logout error:', error);
-      // Still clear local data even if logout fails
       clearAuthData();
     }
   };

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -41,15 +43,17 @@ const Header = () => {
             <a href="#docs" className="text-gray-600 hover:text-primary-500 font-inter font-medium transition-colors">
               Docs
             </a>
-            <Link to="/login" className="text-gray-600 hover:text-primary-500 font-inter font-medium transition-colors">
-              Login
-            </Link>
+            {!isAuthenticated && (
+              <Link to="/login" className="text-gray-600 hover:text-primary-500 font-inter font-medium transition-colors">
+                Login
+              </Link>
+            )}
           </nav>
 
           {/* Desktop CTA */}
           <div className="hidden lg:flex items-center space-x-4">
             <Link 
-              to="/register"
+              to={isAuthenticated ? "/dashboard" : "/register"}
               className="bg-primary-500 hover:bg-primary-600 text-white px-6 py-2.5 rounded-xl font-inter font-medium transition-colors"
             >
               Get Started
@@ -79,12 +83,14 @@ const Header = () => {
             <a href="#docs" className="block text-gray-600 hover:text-primary-500 font-inter font-medium py-2 transition-colors">
               Docs
             </a>
-            <Link to="/login" className="block text-gray-600 hover:text-primary-500 font-inter font-medium py-2 transition-colors">
-              Login
-            </Link>
+            {!isAuthenticated && (
+              <Link to="/login" className="block text-gray-600 hover:text-primary-500 font-inter font-medium py-2 transition-colors">
+                Login
+              </Link>
+            )}
             <div className="pt-4">
               <Link 
-                to="/register"
+                to={isAuthenticated ? "/dashboard" : "/register"}
                 className="block w-full bg-primary-500 hover:bg-primary-600 text-white px-6 py-3 rounded-xl font-inter font-medium transition-colors text-center"
               >
                 Get Started

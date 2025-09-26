@@ -40,13 +40,16 @@ const LoginPage = () => {
       });
 
       if (response.success) {
-        // Redirect to dashboard or home page
         navigate('/dashboard');
       } else {
-        setError(response.message);
+        setError(response.message || 'Authentication failed');
       }
     } catch (error) {
-      setError('An unexpected error occurred. Please try again.');
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -61,7 +64,7 @@ const LoginPage = () => {
             <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-electric-500 rounded-xl flex items-center justify-center">
               <MessageCircle className="w-6 h-6 text-white" />
             </div>
-            <span className="text-2xl font-poppins font-bold text-gray-800">ChatLens</span>
+            <span className="text-2xl font-poppins font-bold text-gray-800">{import.meta.env.VITE_APP_NAME}</span>
           </Link>
           
           <h2 className="text-3xl font-poppins font-bold text-gray-900 mb-2">
@@ -205,16 +208,6 @@ const LoginPage = () => {
                 Sign up for free
               </Link>
             </p>
-          </div>
-        </div>
-
-        {/* Demo Credentials */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <h3 className="text-sm font-inter font-semibold text-blue-800 mb-2">Demo Credentials</h3>
-          <div className="text-xs text-blue-700 font-inter space-y-1">
-            <p><strong>Admin:</strong> admin@chatlens.com / AdminPass123!</p>
-            <p><strong>User:</strong> john.doe@example.com / UserPass123!</p>
-            <p><strong>Guest:</strong> guest@example.com / GuestPass789!</p>
           </div>
         </div>
 

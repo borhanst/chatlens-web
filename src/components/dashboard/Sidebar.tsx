@@ -13,7 +13,8 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageCircle,
-  Bot
+  Bot,
+  
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -36,11 +37,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       active: location.pathname === '/dashboard'
     },
     {
-      id: 'bot-settings',
-      label: 'Bot Settings',
+      id: 'agent-settings',
+      label: 'Agent Settings',
       icon: Bot,
-      path: '/dashboard/bot-settings',
-      active: location.pathname === '/dashboard/bot-settings'
+      path: '/dashboard/agent-settings',
+      active: location.pathname === '/dashboard/agent-settings'
     },
     {
       id: 'chat-analytics',
@@ -90,6 +91,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       icon: CreditCard,
       path: '/dashboard/billing',
       active: location.pathname === '/dashboard/billing'
+    },
+    {
+      id: 'profile',
+      label: 'Profile Settings',
+      icon: Settings,
+      path: '/dashboard/profile',
+      active: location.pathname === '/dashboard/profile'
     }
   ];
 

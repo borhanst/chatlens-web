@@ -1,10 +1,11 @@
 // API Configuration
-const API_BASE_URL = 'http://127.0.0.1:8001/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+const AUTHORIZATION_TOKEN_TYPE = import.meta.env.VITE_AUTHORIZATION_TOKEN_TYPE;
 const API_ENDPOINTS = {
-  register: '/auth/users/',
-  login: '/auth/token/',
-  refreshToken: '/auth/token/refresh/',
-  profile: '/auth/users/me/'
+  register: '/api/auth/users/',
+  login: '/api/auth/jwt/create/',
+  refreshToken: '/api/auth/jwt/refresh/',
+  profile: '/api/auth/users/me/'
 };
 
 // CSRF token handling
@@ -31,14 +32,15 @@ const apiClient = async <T>({ method, endpoint, data, requiresAuth = false }: AP
     'Content-Type': 'application/json',
     // 'X-CSRFTOKEN': getCSRFToken(),
   };
-
+  
   if (requiresAuth) {
     const token = localStorage.getItem('authToken');
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers['Authorization'] = `${AUTHORIZATION_TOKEN_TYPE} ${token}`;
     }
   }
-
+  console.log("api url ", import.meta.env.API_URL);
+  
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method,
@@ -396,17 +398,8 @@ export const sanitizeUser = (user: User): Omit<User, 'password'> => {
 /**
  * Registers a new user with validation and security checks
  */
-export const registerUser = async (userData: RegisterData, clientIp: string): Promise<AuthResponse> => {
+export const registerUser = async (userData: RegisterData): Promise<AuthResponse> => {
   try {
-    // Rate limiting check
-    const rateLimitCheck = checkRateLimit(`register_${clientIp}`);
-    if (!rateLimitCheck.allowed) {
-      return {
-        success: false,
-        message: `Too many registration attempts. Please try again after ${new Date(rateLimitCheck.resetTime!).toLocaleTimeString()}`
-      };
-    }
-    
     // Input validation
     const usernameValidation = validateUsername(userData.username);
     if (!usernameValidation.isValid) {
@@ -426,25 +419,13 @@ export const registerUser = async (userData: RegisterData, clientIp: string): Pr
       return { success: false, message: 'First name and last name are required' };
     }
     
-    // Check for existing users
-    if (findUserByEmail(userData.email)) {
-      return { success: false, message: 'An account with this email already exists' };
-    }
-    
-    if (findUserByUsername(userData.username)) {
-      return { success: false, message: 'This username is already taken' };
-    }
-    
-    // Create new user
+    // Create new user via API
     const newUser = await createUser(userData);
-    const sanitizedUser = sanitizeUser(newUser);
-    const token = generateToken(sanitizedUser);
     
     return {
       success: true,
       message: 'Account created successfully',
-      user: sanitizedUser,
-      token
+      user: newUser
     };
     
   } catch (error) {
@@ -469,17 +450,8 @@ export const registerUser = async (userData: RegisterData, clientIp: string): Pr
 /**
  * Authenticates user login with validation and security checks
  */
-export const loginUser = async (loginData: LoginData, clientIp: string): Promise<AuthResponse> => {
+export const loginUser = async (loginData: LoginData): Promise<AuthResponse> => {
   try {
-    // Rate limiting check
-    const rateLimitCheck = checkRateLimit(`login_${clientIp}`);
-    if (!rateLimitCheck.allowed) {
-      return {
-        success: false,
-        message: `Too many login attempts. Please try again after ${new Date(rateLimitCheck.resetTime!).toLocaleTimeString()}`
-      };
-    }
-    
     // Input validation
     if (!validateEmail(loginData.email)) {
       return { success: false, message: 'Please enter a valid email address' };
@@ -488,70 +460,51 @@ export const loginUser = async (loginData: LoginData, clientIp: string): Promise
     if (!loginData.password) {
       return { success: false, message: 'Password is required' };
     }
+
+    // Make API request
+    const response = await apiClient<{ access: string; refresh: string }>({
+      method: 'POST',
+      endpoint: API_ENDPOINTS.login,
+      data: {
+        username: loginData.email,  // API expects username field
+        password: loginData.password
+      }
+    });
     
-    // Find user
-    const user = findUserByEmail(loginData.email);
-    if (!user) {
-      return { success: false, message: 'Invalid email or password' };
+    if (response.access && response.refresh) {
+      // Store tokens
+      localStorage.setItem('authToken', response.access);
+      localStorage.setItem('refreshToken', response.refresh);
+
+      // Get user profile
+      const userProfile = await apiClient<User>({
+        method: 'GET',
+        endpoint: API_ENDPOINTS.profile,
+        requiresAuth: true
+      });
+
+      return {
+        success: true,
+        message: 'Login successful',
+        user: userProfile
+      };
     }
-    
-    // Check if user is active
-    if (!user.profile.is_active) {
-      return { success: false, message: 'Your account has been deactivated. Please contact support.' };
-    }
-    
-    // Verify password
-    const isPasswordValid = await comparePassword(loginData.password, user.password);
-    if (!isPasswordValid) {
-      return { success: false, message: 'Invalid email or password' };
-    }
-    
-    // Update last login
-    updateLastLogin(user.id);
-    
-    // Generate token
-    const sanitizedUser = sanitizeUser(user);
-    const token = generateToken(sanitizedUser);
-    
+
     return {
-      success: true,
-      message: 'Login successful',
-      user: sanitizedUser,
-      token
+      success: false,
+      message: 'Authentication failed'
     };
-    
   } catch (error) {
-    console.error('Login error:', error);
-    return { success: false, message: 'An error occurred during login. Please try again.' };
+    const apiError = error as APIError;
+    return {
+      success: false,
+      message: apiError.message || 'An error occurred during login'
+    };
   }
 };
 
-/**
- * Validates authentication token and returns user data
- */
-export const validateAuthToken = (token: string): { isValid: boolean; user?: Omit<User, 'password'>; message: string } => {
-  try {
-    const decoded = verifyToken(token);
-    const user = findUserById(decoded.id);
-    
-    if (!user) {
-      return { isValid: false, message: 'User not found' };
-    }
-    
-    if (!user.profile.is_active) {
-      return { isValid: false, message: 'Account is deactivated' };
-    }
-    
-    return {
-      isValid: true,
-      user: sanitizeUser(user),
-      message: 'Token is valid'
-    };
-    
-  } catch (error) {
-    return { isValid: false, message: 'Invalid or expired token' };
-  }
-};
+
+
 
 /**
  * Logs out user (in a real app, you might want to blacklist the token)
@@ -568,7 +521,3 @@ export const logoutUser = (): { success: boolean; message: string } => {
   };
 };
 
-// Export mock users for testing purposes (remove in production)
-export const getMockUsers = (): Omit<User, 'password'>[] => {
-  return mockUsers.map(user => sanitizeUser(user));
-};
